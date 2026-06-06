@@ -9,20 +9,20 @@ st.set_page_config(page_title='Classifier Tabular', page_icon=':bar_chart:', lay
 @st.cache_resource
 def load_artefak():
     # Tambahkan pengecekan file agar tidak error jika file hilang
-    files = ['model.pkl', 'preprocessor.pkl', 'selector.pkl', 'label_encoder.pkl', 'meta.pkl', 'threshold.txt']
+    files = ['lr_best.pkl', 'preprocessor.pkl', 'selector.pkl', 'label_encoder.pkl', 'meta.pkl', 'threshold.txt']
     for f in files:
         if not os.path.exists(f):
             st.error(f"File {f} tidak ditemukan!")
             st.stop()
             
-    model = joblib.load('model.pkl')
+    model = joblib.load('lr_best.pkl')
     preprocessor = joblib.load('preprocessor.pkl')
     selector = joblib.load('selector.pkl')
     le = joblib.load('label_encoder.pkl')
     meta = joblib.load('meta.pkl')
     with open('threshold.txt') as f:
         thr = float(f.read().strip())
-    return model, preprocessor, selector, le, meta, thr
+    return lr_best, preprocessor, selector, le, meta, thr
 
 # Load artefak
 model, preprocessor, selector, le, meta, threshold = load_artefak()
