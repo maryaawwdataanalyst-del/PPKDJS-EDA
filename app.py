@@ -1,70 +1,77 @@
 import streamlit as st
 import joblib
-import numpy as np
 import pandas as pd
+import numpy as np
  
-# ---------- Konfigurasi halaman ----------
-st.set_page_config(
-    page_title='Prediksi Regresi Linear',
-    page_icon=':bar_chart:',
-    layout='centered',
-)
+st.set_page_config(page_title='Classifier Tabular', page_icon=':bar_chart:', layout='wide')
  
-# ---------- Muat model & scaler (cached) ----------
 @st.cache_resource
 def load_artefak():
-    model  = joblib.load('regresi_berganda.pkl')
-    scaler = joblib.load('scaler.pkl')
-    fitur  = joblib.load('fitur.pkl')
-    return model, scaler, fitur
+    model        = joblib.load('model.pkl')
+    preprocessor = joblib.load('preprocessor.pkl')
+    selector     = joblib.load('selector.pkl')
+    le           = joblib.load('label_encoder.pkl')
+    meta         = joblib.load('meta.pkl')
+    with open('threshold.txt') as f:
+        thr = float(f.read().strip())
+    return model, preprocessor, selector, le, meta, thr
  
-model, scaler, FITUR = load_artefak()
+model, preprocessor, selector, le, meta, threshold = load_artefak()
+NUM_COLS = meta['NUM_COLS']
+CAT_COLS = meta['CAT_COLS']
  
-# ---------- Header ----------
-st.title(':bar_chart: Web Prediksi Regresi Linear')
-st.markdown('Masukkan nilai tiap fitur di sidebar, lalu klik **Prediksi**.')
+st.title(':bar_chart: Web Klasifikasi Tabular')
+st.caption(f'Threshold prediksi: {threshold:.3f}  |  Kelas: {list(le.classes_)}')
 st.divider()
  
-# ---------- Input di sidebar ----------
-st.sidebar.header('Input Fitur')
+# Form input fitur
+st.subheader('Masukkan nilai fitur:')
+col1, col2 = st.columns(2)
 input_user = {}
-for f in FITUR:
-    input_user[f] = st.sidebar.number_input(
-        label=f,
-        value=0.0,
-        step=0.1,
-        format='%.4f',
-    )
  
-# ---------- Tombol prediksi ----------
-if st.sidebar.button('Prediksi', type='primary', use_container_width=True):
+with col1:
+    st.markdown('**Fitur Numerik**')
+    for kol in NUM_COLS:
+        input_user[kol] = st.number_input(
+            label=kol, value=0.0, step=0.1, format='%.4f', key=f'num_{kol}'
+        )
+ 
+with col2:
+    st.markdown('**Fitur Kategorikal**')
+    for kol in CAT_COLS:
+        # Default: text input (peserta bisa ganti ke selectbox kalau tahu nilai uniknya)
+        input_user[kol] = st.text_input(label=kol, value='', key=f'cat_{kol}')
+ 
+st.divider()
+if st.button('Prediksi', type='primary', use_container_width=True):
     try:
-        # Susun DataFrame sesuai urutan FITUR (hindari warning feature names)
-        nilai = pd.DataFrame([[input_user[f] for f in FITUR]], columns=FITUR)
-        nilai_sc = scaler.transform(nilai)
-        pred = model.predict(nilai_sc)[0]
+        # Susun DataFrame sesuai urutan fitur
+        df_input = pd.DataFrame([input_user])
+ 
+        # Apply preprocessing pipeline
+        X_enc = preprocessor.transform(df_input)
+        X_sel = selector.transform(X_enc)
+ 
+        # Prediksi
+        proba = model.predict_proba(X_sel)[0, 1]
+        pred  = int(proba >= threshold)
+        kelas_pred = le.classes_[pred]
  
         # Tampilkan hasil
-        st.success(f'Hasil prediksi:  **{pred:,.4f}**')
+        st.success(f'Hasil prediksi: **{kelas_pred}**')
+ 
+        cm1, cm2 = st.columns(2)
+        cm1.metric('Probabilitas kelas positif', f'{proba:.4f}')
+        cm2.metric('Threshold yang dipakai',     f'{threshold:.4f}')
+        st.progress(float(proba))
  
         # Tampilkan input yang dipakai
         st.subheader('Input yang Digunakan')
-        st.dataframe(pd.DataFrame([input_user]), use_container_width=True)
- 
-        # Tampilkan koefisien model (untuk transparansi)
-        st.subheader('Koefisien Model (Terstandarisasi)')
-        df_koef = pd.DataFrame({
-            'Fitur': FITUR,
-            'Koefisien': model.coef_.round(4),
-        })
-        st.dataframe(df_koef, use_container_width=True, hide_index=True)
-        st.caption(f'Intercept (β₀) = {model.intercept_:.4f}')
+        st.dataframe(df_input, use_container_width=True, hide_index=True)
  
     except Exception as e:
-        st.error(f'Terjadi error: {e}')
-else:
-    st.info('Isi nilai fitur di sidebar, lalu klik tombol Prediksi.')
+        st.error(f'Error: {e}')
+        st.info('Periksa nilai input - pastikan kategorikal sesuai dengan training data.')
  
-# ---------- Footer ----------
 st.divider()
-st.caption('Dibuat untuk PPKD Jakarta Selatan — Kejuruan Data Analyst')
+st.caption('Dibuat untuk PPKD Jakarta Selatan - Kejuruan Data Analyst')
